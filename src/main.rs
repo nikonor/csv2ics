@@ -22,8 +22,16 @@ fn main() {
         }
         Ok(_) => {}
     }
-    println!("dd={}", d.unwrap());
-    // println!("dd={}",d.unwrap().add(Days::new(1)));
+
+    let mut d = d.unwrap();
+    for _ in 0..10 {
+        println!("{}-{}", d, d.weekday());
+        d = next_day(d);
+    }
+}
+
+fn next_day(d: NaiveDate) -> NaiveDate {
+    d.add(Days::new(1))
 }
 
 fn parse_date(s: String) -> Result<NaiveDate, String> {
