@@ -7,6 +7,17 @@ edition = "2024"
 chrono = "0.4.42"
 csv = "1.3.1"
 
+[dependencies.ics]
+version = "0.5"
+default-features = false
+
+[dependencies.uuid]
+version = "1.18.1"
+# Lets you generate random UUIDs
+features = [
+    "v4",
+]
+
 #https://docs.rs/uuid/latest/uuid/
 #https://docs.rs/csv/latest/csv/
 #https://docs.rs/ics/latest/ics/struct.Event.html

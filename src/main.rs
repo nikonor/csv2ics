@@ -1,14 +1,13 @@
 use chrono::{Datelike, Days, NaiveDate, Weekday::Mon};
 use csv::Reader;
+use ics::components::{Parameter, Property};
+use ics::parameters::Value;
+use ics::properties::{Comment, DtEnd, DtStart, Summary};
+use ics::{Event, ICalendar};
 use std::fs::File;
 use std::ops::Add;
 use std::{io::Write, io::stderr};
-
-struct Day {
-    d: NaiveDate,
-    title: String,
-    description: String,
-}
+use uuid::Uuid;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -33,6 +32,7 @@ fn main() {
     let mut d = d.unwrap();
 
     let mut rdr: Reader<File>;
+    let mut calendar = ICalendar::new("2.0", "ics-rs");
 
     let tmp = csv::ReaderBuilder::new()
         .has_headers(false)
@@ -47,16 +47,21 @@ fn main() {
     for r in rdr.records() {
         // print!("{}-{} => ", d, d.weekday());
 
-        let mut day = Day {
-            d,
-            title: "".to_string(),
-            description: "".to_string(),
-        };
+        let mut event = Event::new(Uuid::new_v4().to_string(), d.format("%Y%m%d").to_string());
+
+        let start = d.format("%Y%m%dT000000").to_string();
+        d = next_day(d);
+        let end = d.format("%Y%m%dT000000").to_string();
 
         match r {
             Ok(records) => {
-                day.title = records[0].to_string();
-                day.description = records[1].to_string();
+                event.push(Summary::new(records[0].to_string()));
+                event.push(Comment::new(records[1].to_string()));
+                event.push(DtStart::new(start));
+                event.push(DtEnd::new(end));
+                // event.push(DtStart::new());
+                // event.push(Property::new("DTSTART;VALUE"));
+                // event.push(Property::new("DTEND",end));
             }
             Err(ee) => {
                 writeln!(
@@ -69,12 +74,17 @@ fn main() {
                 std::process::exit(1);
             }
         };
-        println!("{}=>{}=>{}", day.d, day.title, day.description);
-
-        d = next_day(d);
+        calendar.add_event(event);
     }
 
-    // TODO: запись ics-файла
+    // TODO: запись ics-файл
+    match calendar.save_file(args[3].as_str()) {
+        Err(e) => {
+            writeln!(stderr(), "Error::{}::write file error::{} ", e, args[2]).unwrap();
+            std::process::exit(1);
+        }
+        Ok(_) => {}
+    }
 }
 
 fn next_day(d: NaiveDate) -> NaiveDate {
