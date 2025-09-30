@@ -1,10 +1,7 @@
-use chrono::{Datelike, Days, NaiveDate, Weekday::Mon};
-use csv::Reader;
+use chrono::{Datelike, NaiveDate, Weekday::Mon};
 use ics::components::Property;
 use ics::properties::{Comment, Summary};
 use ics::{Event, ICalendar};
-use std::fs::File;
-use std::ops::Add;
 use std::{io::Write, io::stderr};
 use uuid::Uuid;
 
@@ -20,79 +17,59 @@ fn main() {
         std::process::exit(1);
     }
 
-    let d = parse_date(args[1].as_str());
-    match d {
-        Err(_e) => {
-            writeln!(stderr(), "Error::{}::date parse error {} ", args[1], _e).unwrap();
-            std::process::exit(1);
-        }
-        Ok(_) => {}
-    }
-    let mut d = d.unwrap();
-
-    let mut rdr: Reader<File>;
-    let mut calendar = ICalendar::new("2.0", "ics-rs");
-
-    let tmp = csv::ReaderBuilder::new()
-        .has_headers(false)
-        .from_path(args[2].as_str());
-    match tmp {
+    match run(args[1].as_str(), args[2].as_str(), args[3].as_str()) {
         Err(e) => {
-            writeln!(stderr(), "Error::{}::read from::{} ", e, args[2]).unwrap();
-            std::process::exit(1);
-        }
-        Ok(r) => rdr = r,
-    }
-    for r in rdr.records() {
-        // print!("{}-{} => ", d, d.weekday());
-
-        let mut event = Event::new(
-            Uuid::new_v4().to_string(),
-            d.format("%Y%m%dT000000").to_string(),
-        );
-
-        let start = d.format("%Y%m%d").to_string();
-        d = next_day(d);
-        let end = d.format("%Y%m%d").to_string();
-
-        match r {
-            Ok(records) => {
-                event.push(Summary::new(records[0].to_string()));
-                event.push(Comment::new(records[1].to_string()));
-                // event.push(DtStart::new(start));
-                event.push(Property::new("DTSTART;VALUE=DATE", start));
-                // event.push(DtEnd::new(end));
-                event.push(Property::new("DTEND;VALUE=DATE", end));
-                // event.push(DtStart::new());
-                // event.push(Property::new("DTSTART;VALUE"));
-                // event.push(Property::new("DTEND",end));
-            }
-            Err(ee) => {
-                writeln!(
-                    stderr(),
-                    "Error::{}::read string from csv::{} ",
-                    ee,
-                    args[2]
-                )
-                .unwrap();
-                std::process::exit(1);
-            }
-        };
-        calendar.add_event(event);
-    }
-
-    // TODO: запись ics-файл
-    match calendar.save_file(args[3].as_str()) {
-        Err(e) => {
-            writeln!(stderr(), "Error::{}::write file error::{} ", e, args[2]).unwrap();
+            eprintln!("Error::{} ", e);
             std::process::exit(1);
         }
         Ok(_) => {}
     }
 }
 
-fn next_day(d: NaiveDate) -> NaiveDate {
-    d.add(Days::new(1))
+fn run(first_monday: &str, csv_path: &str, ics_path: &str) -> Result<(), String> {
+    let mut d = parse_date(first_monday).map_err(|e| format!("parse_date error={}", e))?;
+
+    let mut calendar = ICalendar::new("2.0", "ics-rs");
+
+    let mut rdr = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .flexible(true)
+        .from_path(csv_path)
+        .map_err(|e| format!("read csv error={}", e))?;
+
+    for (idx, r) in rdr.records().enumerate() {
+        let records = r.map_err(|e| format!("CSV error at line {}: {}", idx + 1, e))?;
+
+        if records.is_empty() {
+            return Err(format!("CSV line {} is empty", idx + 1));
+        }
+
+        let start = d.format("%Y%m%d").to_string();
+        let end = d.succ_opt().unwrap().format("%Y%m%d").to_string();
+
+        let mut event = Event::new(
+            Uuid::new_v4().to_string(),
+            d.format("%Y%m%dT000000").to_string(),
+        );
+
+        event.push(Summary::new(records[0].to_string()));
+        if records.len() > 1 {
+            event.push(Comment::new(records[1].to_string()));
+        }
+        event.push(Property::new("DTSTART;VALUE=DATE", start));
+        event.push(Property::new("DTEND;VALUE=DATE", end));
+
+        calendar.add_event(event);
+
+        d = d.succ_opt().unwrap();
+    }
+
+    // запись ics-файл
+    calendar
+        .save_file(ics_path)
+        .map_err(|e| format!("save ics file error={}", e))?;
+
+    Ok(())
 }
 
 fn parse_date(s: &str) -> Result<NaiveDate, String> {
@@ -110,13 +87,15 @@ fn parse_date(s: &str) -> Result<NaiveDate, String> {
 
 #[test]
 fn test_parse_valid_date() {
-    let valid_date_str = "2023-10-09".to_string();
-    let ret = parse_date(valid_date_str.as_str());
-    assert!(!ret.is_err())
+    assert!(parse_date("2023-10-09").is_ok())
+}
+
+#[test]
+fn test_parse_not_monday() {
+    assert!(parse_date("2023-10-10").is_err())
 }
 
 #[test]
 fn test_empty_date_string() {
-    let empty_date_str = "".to_string();
-    assert!(parse_date(empty_date_str.as_str()).is_err());
+    assert!(parse_date("").is_err());
 }
