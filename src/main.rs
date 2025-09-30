@@ -1,8 +1,7 @@
 use chrono::{Datelike, Days, NaiveDate, Weekday::Mon};
 use csv::Reader;
-use ics::components::{Parameter, Property};
-use ics::parameters::Value;
-use ics::properties::{Comment, DtEnd, DtStart, Summary};
+use ics::components::Property;
+use ics::properties::{Comment, Summary};
 use ics::{Event, ICalendar};
 use std::fs::File;
 use std::ops::Add;
@@ -47,18 +46,23 @@ fn main() {
     for r in rdr.records() {
         // print!("{}-{} => ", d, d.weekday());
 
-        let mut event = Event::new(Uuid::new_v4().to_string(), d.format("%Y%m%d").to_string());
+        let mut event = Event::new(
+            Uuid::new_v4().to_string(),
+            d.format("%Y%m%dT000000").to_string(),
+        );
 
-        let start = d.format("%Y%m%dT000000").to_string();
+        let start = d.format("%Y%m%d").to_string();
         d = next_day(d);
-        let end = d.format("%Y%m%dT000000").to_string();
+        let end = d.format("%Y%m%d").to_string();
 
         match r {
             Ok(records) => {
                 event.push(Summary::new(records[0].to_string()));
                 event.push(Comment::new(records[1].to_string()));
-                event.push(DtStart::new(start));
-                event.push(DtEnd::new(end));
+                // event.push(DtStart::new(start));
+                event.push(Property::new("DTSTART;VALUE=DATE", start));
+                // event.push(DtEnd::new(end));
+                event.push(Property::new("DTEND;VALUE=DATE", end));
                 // event.push(DtStart::new());
                 // event.push(Property::new("DTSTART;VALUE"));
                 // event.push(Property::new("DTEND",end));
